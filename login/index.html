@@ -2298,10 +2298,10 @@
                                                             class="glass-input w-full px-3 py-2 rounded-lg text-sm">
                                                     </div>
                                                     <div class="space-y-1">
-                                                        <label class="text-xs text-gray-400 font-semibold">Harga
-                                                            Terendah Base (Angka Murni: 290100000)</label>
-                                                        <input type="number" id="edit-prod-price"
-                                                            class="glass-input w-full px-3 py-2 rounded-lg text-sm">
+                                                        <label class="text-xs text-gray-400 font-semibold">Harga Terendah (Otomatis dari Pricelist)</label>
+                                                        <input type="text" id="edit-prod-price-display" readonly
+                                                            class="glass-input w-full px-3 py-2 rounded-lg text-sm bg-slate-900/60 text-gray-400 cursor-not-allowed">
+                                                        <input type="hidden" id="edit-prod-price">
                                                     </div>
                                                     <div class="space-y-1">
                                                         <label class="text-xs text-gray-400 font-semibold">Uang Muka
@@ -2338,6 +2338,14 @@
                                                         </select>
                                                     </div>
                                                 </div>
+                                                
+                                                <!-- Dynamic Pricelist Model Mapping -->
+                                                <div class="space-y-1 pt-2">
+                                                    <label class="text-xs text-gray-400 font-semibold block">Hubungkan ke Model Pricelist (Pilih satu atau lebih)</label>
+                                                    <div id="edit-prod-pricelist-checkboxes" class="flex flex-wrap gap-2.5 p-3.5 rounded-xl border border-slate-800 bg-slate-950/40">
+                                                        <!-- Loaded dynamically from pricelist.json -->
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <!-- Section 2: Spesifikasi Lengkap Mobil (Dinamis) -->
@@ -2358,15 +2366,6 @@
                                                     class="space-y-2 bg-slate-950/40 p-4 rounded-xl border border-slate-800/80">
                                                     <!-- Loaded dynamically via JS -->
                                                 </div>
-                                            </div>
-
-                                            <!-- Variants list -->
-                                            <div class="space-y-2">
-                                                <label class="block text-xs text-gray-400 font-semibold">Varian Mobil
-                                                    OTR (Satu baris per varian, format: Tipe Trans OTR : Harga)</label>
-                                                <textarea id="edit-prod-variants"
-                                                    class="glass-input w-full px-3 py-2 rounded-lg text-sm h-24"
-                                                    placeholder="S M/T OTR : Rp307.100.000&#10;E CVT OTR : Rp323.000.000"></textarea>
                                             </div>
 
                                             <!-- Images Gallery -->
@@ -6833,12 +6832,49 @@
             document.getElementById('edit-prod-header').innerText = `Edit: ${p.name || id}`;
             document.getElementById('edit-prod-id').value = id;
             document.getElementById('edit-prod-name').value = p.name || '';
-            document.getElementById('edit-prod-price').value = p.price || 0;
+
+            // Format price for read-only display
+            const priceVal = p.price || 0;
+            const priceText = priceVal > 0 ? 'Rp ' + priceVal.toLocaleString('id-ID') : 'Hubungi Dealer / Otomatis';
+            document.getElementById('edit-prod-price-display').value = priceText;
+            document.getElementById('edit-prod-price').value = priceVal;
+
             document.getElementById('edit-prod-dp').value = p.dp || '';
             document.getElementById('edit-prod-angsuran').value = p.angsuran || '';
             document.getElementById('edit-prod-category').value = p.category || 'SUV';
             const badgeVal = p.new === true ? 'New' : (p.new || '');
             document.getElementById('edit-prod-new-select').value = badgeVal;
+
+            // Populate checkboxes for dynamic pricelist models mapping
+            const plCheckboxesContainer = document.getElementById('edit-prod-pricelist-checkboxes');
+            if (plCheckboxesContainer) {
+                plCheckboxesContainer.innerHTML = '';
+                const plModels = appData.pricelist?.models || [];
+                let currentIds = p.pricelist_ids || (p.pricelist_id ? [p.pricelist_id] : []);
+                if (currentIds.length === 0) {
+                    // Smart automatic fallback for checkboxes if not manually set yet
+                    const cleanId = id.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (cleanId === 'brio') {
+                        currentIds = ['brio-satya', 'brio-rs'];
+                    } else if (cleanId === 'stepwgn') {
+                        currentIds = ['step-wgn'];
+                    } else if (cleanId === 'cityhatchbackrs' || cleanId === 'cityhatchback') {
+                        currentIds = ['city-hatchback'];
+                    } else if (plModels.some(m => m.id === id)) {
+                        currentIds = [id];
+                    }
+                }
+                
+                plModels.forEach(m => {
+                    const isChecked = currentIds.includes(m.id) ? 'checked' : '';
+                    plCheckboxesContainer.innerHTML += `
+                        <label class="inline-flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs hover:border-slate-700 cursor-pointer select-none text-white transition hover:bg-slate-800">
+                            <input type="checkbox" name="edit-prod-pl-ids" value="${m.id}" ${isChecked} class="rounded border-slate-700 text-red-600 focus:ring-red-500 bg-slate-950">
+                            <span>${m.label || m.id}</span>
+                        </label>
+                    `;
+                });
+            }
 
             // Populate Dynamic Specifications List
             const specsContainer = document.getElementById('edit-prod-specs-container');
@@ -6856,7 +6892,7 @@
                 specsList.forEach(s => renderProductSpecItem(s));
             }
 
-            document.getElementById('edit-prod-variants').value = (p.variants || []).join('\n');
+
 
             const gallery = document.getElementById('edit-prod-images-container');
             gallery.innerHTML = '';
@@ -7091,7 +7127,32 @@
             if (!p) return;
 
             p.name = document.getElementById('edit-prod-name').value.trim();
-            p.price = parseInt(document.getElementById('edit-prod-price').value) || 0;
+            
+            // Save Dynamic Pricelist IDs
+            p.pricelist_ids = [];
+            document.querySelectorAll('input[name="edit-prod-pl-ids"]:checked').forEach(cb => {
+                p.pricelist_ids.push(cb.value);
+            });
+
+            // Update p.price to be computed from the linked pricelist models
+            let plItems = [];
+            const models = appData.pricelist?.models || [];
+            p.pricelist_ids.forEach(key => {
+                const plModel = models.find(m => m.id === key);
+                if (plModel && plModel.items) {
+                    plItems = plItems.concat(plModel.items);
+                }
+            });
+            let lowestNum = Infinity;
+            plItems.forEach(item => {
+                const clean = item.harga.replace(/[^0-9]/g, '');
+                const num = parseInt(clean, 10) || 0;
+                if (num > 0 && num < lowestNum) {
+                    lowestNum = num;
+                }
+            });
+            p.price = lowestNum === Infinity ? 0 : lowestNum;
+
             p.dp = document.getElementById('edit-prod-dp').value.trim();
             p.angsuran = document.getElementById('edit-prod-angsuran').value.trim();
             p.category = document.getElementById('edit-prod-category').value;
@@ -7126,8 +7187,8 @@
                 p.description = document.getElementById('edit-prod-description').value.trim();
             }
 
-            const varText = document.getElementById('edit-prod-variants').value.trim();
-            p.variants = varText ? varText.split('\n').map(v => v.trim()).filter(v => v) : [];
+            // Clean up old manual variants since it is dynamic now
+            delete p.variants;
 
             p.images = [];
             document.querySelectorAll('.prod-img-row').forEach(row => {

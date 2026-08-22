@@ -288,8 +288,50 @@
 
         let carsData = {};
         let siteConfig = {};
+        let pricelistData = {};
         let activeVariantName = "";
         let currentImageIndex = 0;
+
+        // ================= HELPER FUNCTIONS FOR DYNAMIC PRICING =================
+        function getPricelistKeysForProduct(productId, productData) {
+            if (productData && productData.pricelist_ids) {
+                return Array.isArray(productData.pricelist_ids) ? productData.pricelist_ids : [productData.pricelist_ids];
+            }
+            if (productData && productData.pricelist_id) {
+                return [productData.pricelist_id];
+            }
+            const cleanId = productId.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanId === 'brio') {
+                return ['brio-satya', 'brio-rs'];
+            }
+            if (cleanId === 'stepwgn') {
+                return ['step-wgn'];
+            }
+            if (cleanId === 'cityhatchbackrs' || cleanId === 'cityhatchback') {
+                return ['city-hatchback'];
+            }
+            return [productId];
+        }
+
+        function parsePrice(priceStr) {
+            if (!priceStr) return 0;
+            const clean = priceStr.replace(/[^0-9]/g, '');
+            return parseInt(clean, 10) || 0;
+        }
+
+        function getLowestPriceFromItems(items) {
+            if (!items || items.length === 0) return null;
+            let lowestNum = Infinity;
+            let lowestStr = '';
+            items.forEach(item => {
+                const num = parsePrice(item.harga);
+                if (num > 0 && num < lowestNum) {
+                    lowestNum = num;
+                    lowestStr = item.harga;
+                }
+            });
+            return lowestNum === Infinity ? null : { number: lowestNum, string: lowestStr };
+        }
 
         // Resolve Image Path relative to root
         function resolveImgPath(path) {
@@ -302,12 +344,33 @@
         // ================= FETCH AND POPULATE PRODUCTS DATABASE =================
         async function fetchProducts() {
             try {
-                const [productsRes, configRes] = await Promise.all([
+                const [productsRes, configRes, pricelistRes] = await Promise.all([
                     fetch('../data/products.json'),
-                    fetch('../data/site_config.json')
+                    fetch('../data/site_config.json'),
+                    fetch('../data/pricelist.json').then(r => r.json()).catch(() => null)
                 ]);
                 carsData = await productsRes.json();
                 siteConfig = await configRes.json();
+                pricelistData = pricelistRes;
+
+                // Update prices dynamically based on pricelist.json lowest price
+                if (pricelistData && pricelistData.models) {
+                    for (const [id, car] of Object.entries(carsData)) {
+                        if (id === '_config') continue;
+                        const plKeys = getPricelistKeysForProduct(id, car);
+                        let plItems = [];
+                        plKeys.forEach(key => {
+                            const plModel = pricelistData.models.find(m => m.id === key);
+                            if (plModel && plModel.items) {
+                                plItems = plItems.concat(plModel.items);
+                            }
+                        });
+                        const lowest = getLowestPriceFromItems(plItems);
+                        if (lowest) {
+                            car.price = lowest.number;
+                        }
+                    }
+                }
 
                 // Apply dynamic theme configuration if loaded
                 if (siteConfig.theme && window.applyThemeConfig) {
@@ -442,11 +505,34 @@
             const varGrid = document.getElementById('variant-selector-grid');
             varGrid.innerHTML = '';
 
-            const variants = car.variants || [`${car.name} OTR: ${priceFormatted}`];
+            let variants = [];
+            if (pricelistData && pricelistData.models) {
+                const plKeys = getPricelistKeysForProduct(modelId, car);
+                let plItems = [];
+                plKeys.forEach(key => {
+                    const plModel = pricelistData.models.find(m => m.id === key);
+                    if (plModel && plModel.items) {
+                        plItems = plItems.concat(plModel.items);
+                    }
+                });
+                if (plItems.length > 0) {
+                    variants = plItems.map(item => `${item.tipe} ${item.trans} : ${item.harga}`);
+                }
+            }
+
+            if (variants.length === 0) {
+                variants = car.variants || [`${car.name} OTR: ${priceFormatted}`];
+            }
             variants.forEach((v, idx) => {
-                const parts = v.split(':');
-                const vName = parts[0].trim();
-                const vPrice = parts[1] ? parts[1].trim() : priceFormatted;
+                const lastColonIndex = v.lastIndexOf(':');
+                let vName = '';
+                let vPrice = priceFormatted;
+                if (lastColonIndex !== -1) {
+                    vName = v.substring(0, lastColonIndex).trim();
+                    vPrice = v.substring(lastColonIndex + 1).trim();
+                } else {
+                    vName = v.trim();
+                }
                 const cleanVName = vName.replace(/\s+OTR\s*$/i, '').trim();
 
                 const isActive = idx === 0;

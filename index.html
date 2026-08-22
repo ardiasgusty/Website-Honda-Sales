@@ -704,15 +704,77 @@
             `;
         }
 
+        // ================= HELPER FUNCTIONS FOR DYNAMIC PRICING =================
+        function getPricelistKeysForProduct(productId, productData) {
+            if (productData && productData.pricelist_ids) {
+                return Array.isArray(productData.pricelist_ids) ? productData.pricelist_ids : [productData.pricelist_ids];
+            }
+            if (productData && productData.pricelist_id) {
+                return [productData.pricelist_id];
+            }
+            const cleanId = productId.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanId === 'brio') {
+                return ['brio-satya', 'brio-rs'];
+            }
+            if (cleanId === 'stepwgn') {
+                return ['step-wgn'];
+            }
+            if (cleanId === 'cityhatchbackrs' || cleanId === 'cityhatchback') {
+                return ['city-hatchback'];
+            }
+            return [productId];
+        }
+
+        function parsePrice(priceStr) {
+            if (!priceStr) return 0;
+            const clean = priceStr.replace(/[^0-9]/g, '');
+            return parseInt(clean, 10) || 0;
+        }
+
+        function getLowestPriceFromItems(items) {
+            if (!items || items.length === 0) return null;
+            let lowestNum = Infinity;
+            let lowestStr = '';
+            items.forEach(item => {
+                const num = parsePrice(item.harga);
+                if (num > 0 && num < lowestNum) {
+                    lowestNum = num;
+                    lowestStr = item.harga;
+                }
+            });
+            return lowestNum === Infinity ? null : { number: lowestNum, string: lowestStr };
+        }
+
         // ================= FETCH AND POPULATE PRODUCTS DATABASE =================
         async function fetchProducts() {
             try {
-                const [productsRes, configRes] = await Promise.all([
+                const [productsRes, configRes, pricelistRes] = await Promise.all([
                     fetch('./data/products.json'),
-                    fetch('./data/site_config.json')
+                    fetch('./data/site_config.json'),
+                    fetch('./data/pricelist.json').then(r => r.json()).catch(() => null)
                 ]);
                 carsData = await productsRes.json();
                 siteConfig = await configRes.json();
+                const pricelistData = pricelistRes;
+
+                // Update prices dynamically based on pricelist.json lowest price
+                if (pricelistData && pricelistData.models) {
+                    for (const [id, car] of Object.entries(carsData)) {
+                        if (id === '_config') continue;
+                        const plKeys = getPricelistKeysForProduct(id, car);
+                        let plItems = [];
+                        plKeys.forEach(key => {
+                            const plModel = pricelistData.models.find(m => m.id === key);
+                            if (plModel && plModel.items) {
+                                plItems = plItems.concat(plModel.items);
+                            }
+                        });
+                        const lowest = getLowestPriceFromItems(plItems);
+                        if (lowest) {
+                            car.price = lowest.number;
+                        }
+                    }
+                }
 
                 // Apply dynamic configuration if loaded
                 if (siteConfig.contact && window.applyContactConfig) {
