@@ -4098,8 +4098,6 @@
 
                 if (securityRes) appData.security = securityRes;
                 if (configRes) {
-                    appData.siteConfig = configRes;
-                    
                     // Verify license key
                     const isLicenseValid = await verifyLicenseFromSecurity(securityRes, window.location.hostname, configRes.license);
                     if (!isLicenseValid) {
@@ -4132,17 +4130,8 @@
                         faviconEl.href = configRes.site.favicon;
                     }
                 }
-                if (bannerRes) appData.banner = bannerRes;
-                if (productsRes) appData.products = productsRes;
-                if (pricelistRes) appData.pricelist = pricelistRes;
-                if (pagesRes) appData.pages = pagesRes;
 
-                // Populate initial forms from local data immediately
-                if (appData.siteConfig) populateSiteConfigForm();
-                if (appData.banner) populateBannersForm();
-                if (appData.products) populateProductsForm();
-                if (appData.pricelist) populatePricelistForm();
-                if (appData.pages) populatePagesForm();
+                // Local data is loaded for background setups (branding/logos), but forms are not populated until PAT is connected
             } catch (e) {
                 console.warn('Gagal memuat berkas JSON lokal:', e);
             }
@@ -5805,7 +5794,7 @@
         // 2. BANNERS FORM POPULATE & SAVE
         // ==========================================
         function populateBannersForm() {
-            if (!appData.banner) appData.banner = { banners: { desktop: [], mobile: [] } };
+            if (!appData.banner) return;
             const banner = appData.banner;
 
             const dtContainer = document.getElementById('banners-desktop-container');
@@ -6739,10 +6728,11 @@
         // 3. PRODUCTS FORM POPULATE & SAVE
         // ==========================================
         function populateProductsForm() {
+            if (!appData.products) return;
             const listContainer = document.getElementById('product-models-list');
             listContainer.innerHTML = '';
 
-            const products = appData.products || {};
+            const products = appData.products;
             let keys = Object.keys(products);
 
             if (keys.length === 0) {
@@ -7288,10 +7278,11 @@
         // 4. PRICELIST FORM POPULATE & SAVE
         // ==========================================
         function populatePricelistForm() {
+            if (!appData.pricelist) return;
             const selectEl = document.getElementById('pricelist-model-select');
             selectEl.innerHTML = '';
 
-            const models = appData.pricelist?.models || [];
+            const models = appData.pricelist.models || [];
             if (models.length === 0) {
                 selectEl.innerHTML = `<option value="">Tidak ada data</option>`;
                 document.getElementById('pricelist-editor-container').classList.add('hidden');
@@ -7729,11 +7720,12 @@
 
         // ================= CUSTOM PAGES CMS LOGIC (pages.json) =================
         function populatePagesForm() {
+            if (!appData.pages) return;
             const listEl = document.getElementById('custom-pages-list');
             if (!listEl) return;
             listEl.innerHTML = '';
 
-            const pages = appData.pages || {};
+            const pages = appData.pages;
             const keys = Object.keys(pages);
 
             if (keys.length === 0) {
