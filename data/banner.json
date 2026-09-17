@@ -2,6 +2,12 @@
   "banners": {
     "desktop": [
       {
+        "id": "dapatkan-double-kupon-undian-honda-brio",
+        "image": "https://ardiasgusty.github.io/honda/assets/images/banner/banner_1789632014226.webp",
+        "link": "#",
+        "alt": "Dapatkan Double Kupon Undian Honda Brio"
+      },
+      {
         "id": "honda-family-fair",
         "image": "https://ardiasgusty.github.io/honda/assets/images/banner/honda-family-fair_1788322377632.webp",
         "link": "#",
@@ -56,6 +62,18 @@
         "image": "https://ardiasgusty.github.io/honda/assets/images/banner/brio-hrv-slp-mobile_1788317272139.webp",
         "link": "#",
         "alt": "Promo Honda Brio & HR-V Extra Cashback 5jt"
+      },
+      {
+        "id": "dapatkan-double-kupon-undian-honda-brio-mobile-1",
+        "image": "https://ardiasgusty.github.io/honda/assets/images/banner/banner_1789632653371.webp",
+        "link": "#",
+        "alt": "Beli dan Servis Mobil Honda bisa dapat Honda Brio"
+      },
+      {
+        "id": "dapatkan-double-kupon-undian-honda-brio-mobile-2",
+        "image": "https://ardiasgusty.github.io/honda/assets/images/banner/banner_1789632659380.webp",
+        "link": "#",
+        "alt": "Beli dan Servis Mobil Honda bisa dapat Honda Brio"
       }
     ]
   }
