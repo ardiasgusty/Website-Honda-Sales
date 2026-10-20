@@ -4157,6 +4157,9 @@
 
                 if (securityRes) appData.security = securityRes;
                 if (configRes) {
+                    // Keep the loaded configuration available to the login gate and dashboard.
+                    appData.siteConfig = configRes;
+
                     // Verify license key
                     const isLicenseValid = await verifyLicenseFromSecurity(securityRes, window.location.hostname, configRes.license);
                     if (!isLicenseValid) {
