@@ -3791,6 +3791,56 @@
             return hashHex;
         }
 
+        // Same reversible encoding used by Digital-Marketing-Tools.
+        // This keeps the PAT out of plain text fields, but is not secure encryption.
+        const SECRET_SALT = "HB_DIGITAL_MARKETING_SALT_2026_SECURE";
+        function encryptSecret(plainText) {
+            if (!plainText || typeof plainText !== 'string') return '';
+            if (plainText.startsWith('enc::')) return plainText;
+            let encoded = '';
+            for (let i = 0; i < plainText.length; i++) {
+                encoded += String.fromCharCode(plainText.charCodeAt(i) ^ SECRET_SALT.charCodeAt(i % SECRET_SALT.length));
+            }
+            return 'enc::' + btoa(encodeURIComponent(encoded));
+        }
+
+        function decryptSecret(cipherText) {
+            if (!cipherText || typeof cipherText !== 'string') return '';
+            if (!cipherText.startsWith('enc::')) return cipherText;
+            try {
+                const encoded = decodeURIComponent(atob(cipherText.slice(5)));
+                let plainText = '';
+                for (let i = 0; i < encoded.length; i++) {
+                    plainText += String.fromCharCode(encoded.charCodeAt(i) ^ SECRET_SALT.charCodeAt(i % SECRET_SALT.length));
+                }
+                return plainText;
+            } catch (e) {
+                console.error('Gagal membaca konfigurasi GitHub.');
+                return '';
+            }
+        }
+
+        function decodeBase64Utf8(value) {
+            const binary = atob(value.replace(/\s/g, ''));
+            const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+            return new TextDecoder().decode(bytes);
+        }
+
+        function readSavedGithubAuth(saved = {}) {
+            let connection = {};
+            try {
+                connection = JSON.parse(decryptSecret(saved.connection || '') || '{}');
+            } catch (e) {
+                connection = {};
+            }
+            return {
+                owner: connection.owner || decryptSecret(saved.owner || ''),
+                repo: connection.repo || decryptSecret(saved.repo || ''),
+                branch: connection.branch || decryptSecret(saved.branch || ''),
+                token: decryptSecret(saved.token || '')
+            };
+        }
+
         async function verifyLicenseFromSecurity(securityData, domain, configLicense) {
             let cleanDomain = domain.toLowerCase().trim().replace(/^www\./, '');
             if (cleanDomain === 'localhost' || cleanDomain === '127.0.0.1' || cleanDomain.endsWith('.local')) {
@@ -3918,8 +3968,13 @@
                 return;
             }
 
+            const targetHash = appData.siteConfig?.adminPasswordHash;
+            if (!targetHash) {
+                showToast('Konfigurasi sandi belum termuat. Muat ulang halaman dan coba lagi.', 'error');
+                return;
+            }
+
             const hash = await sha256(pwd);
-            const targetHash = appData.siteConfig?.adminPasswordHash || "013c6f85afa67b87fb487684c0b4c6ecdc4c63512286b760008ac7539c75eb2e";
 
             if (hash === targetHash) {
                 sessionStorage.setItem('admin_authenticated', 'true');
@@ -3987,7 +4042,11 @@
 
             // Verify old password
             const oldHash = await sha256(oldPwd);
-            const currentHash = appData.siteConfig?.adminPasswordHash || "013c6f85afa67b87fb487684c0b4c6ecdc4c63512286b760008ac7539c75eb2e";
+            const currentHash = appData.siteConfig?.adminPasswordHash;
+            if (!currentHash) {
+                showToast('Konfigurasi sandi belum termuat. Muat ulang halaman dan coba lagi.', 'error');
+                return;
+            }
 
             if (oldHash !== currentHash) {
                 showToast('Kata sandi lama salah!', 'error');
@@ -4088,7 +4147,7 @@
             // Load initial site config, banners, products, pricelist, pages, and security DB before connection
             try {
                 const [configRes, bannerRes, productsRes, pricelistRes, pagesRes, securityRes] = await Promise.all([
-                    fetch('../data/site_config.json').then(r => r.json()).catch(() => null),
+                    fetch(`../data/site_config.json?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null),
                     fetch('../data/banner.json').then(r => r.json()).catch(() => null),
                     fetch('../data/products.json').then(r => r.json()).catch(() => null),
                     fetch('../data/pricelist.json').then(r => r.json()).catch(() => null),
@@ -4146,10 +4205,11 @@
                 themeIcon.style.color = '#f59e0b';
             }
 
-            document.getElementById('gh-token').value = localStorage.getItem('gh_token') || '';
-            document.getElementById('gh-owner').value = localStorage.getItem('gh_owner') || 'ardiasgusty';
-            document.getElementById('gh-repo').value = localStorage.getItem('gh_repo') || 'Website-Honda-Sales';
-            document.getElementById('gh-branch').value = localStorage.getItem('gh_branch') || 'main';
+            const savedGhConfig = readSavedGithubAuth(appData.siteConfig?.githubAuth || {});
+            document.getElementById('gh-token').value = decryptSecret(localStorage.getItem('gh_token') || '') || savedGhConfig.token;
+            document.getElementById('gh-owner').value = localStorage.getItem('gh_owner') || savedGhConfig.owner || 'ardiasgusty';
+            document.getElementById('gh-repo').value = localStorage.getItem('gh_repo') || savedGhConfig.repo || 'Website-Honda-Sales';
+            document.getElementById('gh-branch').value = localStorage.getItem('gh_branch') || savedGhConfig.branch || 'main';
 
             updateGhConfigFromDom();
 
@@ -4280,7 +4340,7 @@
                 return;
             }
 
-            localStorage.setItem('gh_token', ghConfig.token);
+            localStorage.setItem('gh_token', encryptSecret(ghConfig.token));
             localStorage.setItem('gh_owner', ghConfig.owner);
             localStorage.setItem('gh_repo', ghConfig.repo);
             localStorage.setItem('gh_branch', ghConfig.branch);
@@ -4297,6 +4357,7 @@
 
                 if (!res.ok) throw new Error(`Repo tidak ditemukan atau Token salah (Status: ${res.status})`);
 
+                await persistGitHubCredentialsToSiteConfig();
                 showToast('Terhubung ke GitHub Repositori!');
 
                 statusLabel.className = "flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 h-10";
@@ -4313,6 +4374,52 @@
                 statusLabel.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> Gagal Terkoneksi`;
                 document.getElementById('disconnect-btn').classList.add('hidden');
             }
+        }
+
+        async function persistGitHubCredentialsToSiteConfig() {
+            const path = 'data/site_config.json';
+            const url = `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${path}`;
+            const headers = {
+                'Authorization': `Bearer ${ghConfig.token}`,
+                'Accept': 'application/vnd.github+json'
+            };
+            const getRes = await fetch(url, { headers, cache: 'no-store' });
+            if (!getRes.ok) throw new Error('Tidak bisa membaca site_config.json untuk menyimpan koneksi otomatis.');
+
+            const file = await getRes.json();
+            const config = JSON.parse(decodeBase64Utf8(file.content));
+            const savedAuth = readSavedGithubAuth(config.githubAuth || {});
+            if (savedAuth.owner === ghConfig.owner &&
+                savedAuth.repo === ghConfig.repo &&
+                savedAuth.branch === ghConfig.branch &&
+                savedAuth.token === ghConfig.token) {
+                appData.siteConfig = config;
+                return;
+            }
+
+            config.githubAuth = {
+                connection: encryptSecret(JSON.stringify({
+                    owner: ghConfig.owner,
+                    repo: ghConfig.repo,
+                    branch: ghConfig.branch
+                })),
+                token: encryptSecret(ghConfig.token)
+            };
+
+            const content = btoa(unescape(encodeURIComponent(JSON.stringify(config, null, 2))));
+            const putRes = await fetch(url, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({
+                    message: '🔐 Simpan koneksi GitHub terenkripsi',
+                    content,
+                    sha: file.sha,
+                    branch: ghConfig.branch
+                })
+            });
+            if (!putRes.ok) throw new Error('Gagal menyimpan koneksi otomatis. Pastikan PAT memiliki izin Contents: Read and write.');
+
+            appData.siteConfig = config;
         }
 
         // Pull dynamic JSON files from GitHub
