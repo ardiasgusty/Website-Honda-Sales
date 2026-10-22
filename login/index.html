@@ -398,6 +398,23 @@
             border-color: #fde68a !important;
         }
 
+        /* Pricelist model options are rendered dynamically with dark-mode utility classes. */
+        .light-theme #edit-prod-pricelist-checkboxes {
+            background-color: #f8fafc !important;
+            border-color: #e2e8f0 !important;
+        }
+
+        .light-theme #edit-prod-pricelist-checkboxes .pricelist-model-option {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #1e293b !important;
+        }
+
+        .light-theme #edit-prod-pricelist-checkboxes .pricelist-model-option:hover {
+            background-color: #f1f5f9 !important;
+            border-color: #94a3b8 !important;
+        }
+
         /* Google SERP Live Snippet Box (Clean & Readable in both modes) */
         .google-serp-card {
             background: #ffffff !important;
@@ -6968,7 +6985,7 @@
                 plModels.forEach(m => {
                     const isChecked = currentIds.includes(m.id) ? 'checked' : '';
                     plCheckboxesContainer.innerHTML += `
-                        <label class="inline-flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs hover:border-slate-700 cursor-pointer select-none text-white transition hover:bg-slate-800">
+                        <label class="pricelist-model-option inline-flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs hover:border-slate-700 cursor-pointer select-none text-white transition hover:bg-slate-800">
                             <input type="checkbox" name="edit-prod-pl-ids" value="${m.id}" ${isChecked} class="rounded border-slate-700 text-red-600 focus:ring-red-500 bg-slate-950">
                             <span>${m.label || m.id}</span>
                         </label>
