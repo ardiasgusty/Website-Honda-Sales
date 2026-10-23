@@ -5,6 +5,19 @@ const projectRoot = path.join(__dirname, '..');
 const configPath = path.join(projectRoot, 'data/site_config.json');
 const productsPath = path.join(projectRoot, 'data/products.json');
 
+function resolveSiteBaseUrl() {
+    const configuredUrl = process.env.SITE_URL?.trim();
+    if (configuredUrl) return new URL(configuredUrl).origin;
+
+    const cnamePath = path.join(projectRoot, 'CNAME');
+    if (fs.existsSync(cnamePath)) {
+        const hostname = fs.readFileSync(cnamePath, 'utf8').trim();
+        if (hostname) return `https://${hostname.replace(/^https?:\/\//i, '').replace(/\/$/, '')}`;
+    }
+
+    throw new Error('Base URL tidak ditemukan. Set SITE_URL atau isi file CNAME agar URL OG Image dapat dibuat absolut.');
+}
+
 const targets = [
     { filePath: 'index.html', key: 'home', basePath: './' },
     { filePath: 'pricelist/index.html', key: 'pricelist', basePath: '../' },
@@ -42,6 +55,7 @@ try {
     if (!configData.seo) {
         throw new Error('Property "seo" not found in site_config.json');
     }
+    const siteBaseUrl = resolveSiteBaseUrl();
     
     // 2. Read products database for automatic OG image mapping
     let productsData = {};
@@ -74,6 +88,8 @@ try {
             seoData = seoConfig.default || {};
             console.warn(`SEO configuration not found for target [${target.filePath}]. Using default SEO configuration.`);
         }
+        // A partially configured page inherits each missing value from the global fallback.
+        seoData = { ...(seoConfig.default || {}), ...seoData };
         
         // Determine OpenGraph image path (Auto fallback to product full/thumb image if model page)
         let relativeImg = seoData.image;
@@ -85,15 +101,18 @@ try {
             relativeImg = seoConfig.default?.image || 'assets/images/logo.png';
         }
         
-        const pageImg = relativeImg.startsWith('http') ? relativeImg : `${target.basePath}${relativeImg}`;
+        const pageImg = /^https?:\/\//i.test(relativeImg)
+            ? relativeImg
+            : new URL(`${target.basePath}${relativeImg.replace(/^\.\//, '').replace(/^\//, '')}`, `${siteBaseUrl}/${target.filePath}`).href;
         
         // Format year values statically
         const currentYear = new Date().getFullYear().toString();
         const replaceYear = (str) => str ? str.replace(/{year}/g, currentYear) : '';
         
-        const pageTitle = replaceYear(seoData.title);
-        const pageDesc = replaceYear(seoData.description);
-        const pageKeywords = replaceYear(seoData.keywords);
+        const escapeAttr = (value) => String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const pageTitle = escapeAttr(replaceYear(seoData.title));
+        const pageDesc = escapeAttr(replaceYear(seoData.description));
+        const pageKeywords = escapeAttr(replaceYear(seoData.keywords));
 
         // Prepare replacement meta & link block
         const seoMetaBlock = `

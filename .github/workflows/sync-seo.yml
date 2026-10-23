@@ -1,0 +1,44 @@
+name: Sync static SEO metadata
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'data/site_config.json'
+      - 'data/products.json'
+      - 'scripts/sync_seo.js'
+      - '.github/workflows/sync-seo.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync-seo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Generate static SEO metadata
+        run: node scripts/sync_seo.js
+
+      - name: Commit generated metadata
+        run: |
+          if git diff --quiet; then
+            echo "SEO metadata is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html pricelist/index.html brochure/index.html promo/index.html thank-you/index.html model
+          git commit -m "chore: sync static SEO metadata"
+          git push
